@@ -1,0 +1,613 @@
+openapi: 3.0.3
+info:
+  title: API Raízes do Nordeste
+  version: 1.0.0
+  description: |
+      API REST para gerenciamento de usuários, produtos,
+      estoques, pedidos e pagamentos simulados da rede
+      Raízes do Nordeste.
+servers:
+  - url: http://127.0.0.1:8000
+    description: Ambiente local
+
+tags:
+  - name: Usuários
+  - name: Autenticação
+  - name: Unidades
+  - name: Produtos
+  - name: Estoques
+  - name: Pedidos
+  - name: Pagamentos
+
+paths:
+  /usuarios:
+    post:
+      tags: [Usuários]
+      summary: Cadastrar cliente
+      description: O cadastro público cria somente usuários com perfil CLIENTE. Outros perfis são atribuídos por administrador.
+      operationId: cadastrarUsuario
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CadastroUsuario'
+            example: {nome: 'Maria Silva', email: 'maria@example.com', senha: 'SenhaForte@123'}
+      responses:
+        '201':
+          description: Usuário cadastrado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Usuario' }
+              example: {id: 1, nome: 'Maria Silva', email: 'maria@example.com', perfil: CLIENTE}
+        '409': { $ref: '#/components/responses/Conflito' }
+        '422': { $ref: '#/components/responses/Validacao' }
+  /auth/login:
+    post:
+      tags: [Autenticação]
+      summary: Autenticar usuário e gerar JWT
+      operationId: realizarLogin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Login' }
+            example: {email: 'maria@example.com', senha: 'SenhaForte@123'}
+      responses:
+        '200':
+          description: Login realizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Token' }
+              example: {accessToken: 'eyJhbGciOi...', tokenType: bearer}
+        '401': { $ref: '#/components/responses/NaoAutenticado' }
+        '422': { $ref: '#/components/responses/Validacao' }
+  /unidades:
+    get:
+      tags: [Unidades]
+      summary: Listar unidades ativas
+      operationId: listarUnidades
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Lista paginada de unidades
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [dados, page, limit, total]
+                properties:
+                  dados: {type: array, items: {$ref: '#/components/schemas/Unidade'}}
+                  page: {type: integer}
+                  limit: {type: integer}
+                  total: {type: integer}
+        '422': { $ref: '#/components/responses/Validacao' }
+    post:
+      tags: [Unidades]
+      summary: Cadastrar unidade
+      operationId: cadastrarUnidade
+      security: [{bearerAuth: []}]
+      x-required-roles: [ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UnidadeEntrada' }
+            example: {nome: 'Unidade Centro', endereco: 'Rua Exemplo, 100', ativa: true}
+      responses:
+        '201':
+          description: Unidade cadastrada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Unidade' }
+        '401': { $ref: '#/components/responses/NaoAutenticado' }
+        '403': { $ref: '#/components/responses/SemPermissao' }
+        '422': { $ref: '#/components/responses/Validacao' }
+  /produtos:
+    get:
+      tags: [Produtos]
+      summary: Consultar cardápio por unidade
+      operationId: listarProdutos
+      parameters:
+        - name: unidadeId
+          in: query
+          required: true
+          schema: {type: integer, minimum: 1}
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Produtos cadastrados e disponíveis na unidade
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [dados, page, limit, total]
+                properties:
+                  dados: {type: array, items: {$ref: '#/components/schemas/Produto'}}
+                  page: {type: integer}
+                  limit: {type: integer}
+                  total: {type: integer}
+        '404': { $ref: '#/components/responses/NaoEncontrado' }
+        '422': { $ref: '#/components/responses/Validacao' }
+    post:
+      tags: [Produtos]
+      summary: Cadastrar produto
+      operationId: cadastrarProduto
+      security: [{bearerAuth: []}]
+      x-required-roles: [GERENTE, ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProdutoEntrada' }
+            example: {nome: 'Tapioca de queijo', descricao: 'Tapioca com queijo coalho', preco: 22.95, ativo: true}
+      responses:
+        '201':
+          description: Produto cadastrado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Produto' }
+        '401': { $ref: '#/components/responses/NaoAutenticado' }
+        '403': { $ref: '#/components/responses/SemPermissao' }
+        '422': { $ref: '#/components/responses/Validacao' }
+  /estoques:
+    get:
+      tags: [Estoques]
+      summary: Consultar saldos por unidade
+      operationId: consultarEstoques
+      security: [{bearerAuth: []}]
+      x-required-roles: [GERENTE, ADMIN]
+      parameters:
+        - name: unidadeId
+          in: query
+          required: true
+          schema: {type: integer, minimum: 1}
+      responses:
+        '200':
+          description: Saldos da unidade
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/Estoque'}}
+        '401': { $ref: '#/components/responses/NaoAutenticado' }
+        '403': { $ref: '#/components/responses/SemPermissao' }
+        '404': { $ref: '#/components/responses/NaoEncontrado' }
+        '422': { $ref: '#/components/responses/Validacao' }
+  /estoques/movimentacoes:
+    post:
+      tags: [Estoques]
+      summary: Registrar entrada ou saída de estoque
+      operationId: movimentarEstoque
+      security: [{bearerAuth: []}]
+      x-required-roles: [GERENTE, ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MovimentacaoEntrada' }
+            example: {unidadeId: 1, produtoId: 3, tipo: ENTRADA, quantidade: 10}
+      responses:
+        '201':
+          description: Movimentação registrada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Movimentacao' }
+        '401': { $ref: '#/components/responses/NaoAutenticado' }
+        '403': { $ref: '#/components/responses/SemPermissao' }
+        '404': { $ref: '#/components/responses/NaoEncontrado' }
+        '409': { $ref: '#/components/responses/Conflito' }
+        '422': { $ref: '#/components/responses/Validacao' }
+  /pedidos:
+    post:
+      tags: [Pedidos]
+      summary: Criar pedido
+      description: O usuário é identificado pelo JWT. A API calcula os preços e valida os estoques.
+      operationId: criarPedido
+      security: [{bearerAuth: []}]
+      x-required-roles: [CLIENTE, ATENDENTE, ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PedidoEntrada' }
+            example:
+              unidadeId: 1
+              canalPedido: TOTEM
+              itens: [{produtoId: 3, quantidade: 2}]
+              formaPagamento: MOCK
+      responses:
+        '201':
+          description: Pedido criado aguardando pagamento
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Pedido' }
+              example:
+                id: 8
+                usuarioId: 1
+                unidadeId: 1
+                canalPedido: TOTEM
+                valorTotal: 45.90
+                status: AGUARDANDO_PAGAMENTO
+                itens: [{produtoId: 3, quantidade: 2, precoUnitario: 22.95}]
+        '401': { $ref: '#/components/responses/NaoAutenticado' }
+        '403': { $ref: '#/components/responses/SemPermissao' }
+        '404': { $ref: '#/components/responses/NaoEncontrado' }
+        '409': { $ref: '#/components/responses/Conflito' }
+        '422': { $ref: '#/components/responses/Validacao' }
+    get:
+      tags: [Pedidos]
+      summary: Consultar pedidos com filtros
+      description: Cliente vê apenas os próprios pedidos; gerente e cozinha apenas os de suas unidades autorizadas.
+      operationId: listarPedidos
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: canalPedido
+          in: query
+          schema: { $ref: '#/components/schemas/CanalPedido' }
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/StatusPedido' }
+        - name: unidadeId
+          in: query
+          schema: {type: integer, minimum: 1}
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Pedidos filtrados e paginados
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [dados, page, limit, total]
+                properties:
+                  dados: {type: array, items: {$ref: '#/components/schemas/Pedido'}}
+                  page: {type: integer}
+                  limit: {type: integer}
+                  total: {type: integer}
+        '401': { $ref: '#/components/responses/NaoAutenticado' }
+        '403': { $ref: '#/components/responses/SemPermissao' }
+        '422': { $ref: '#/components/responses/Validacao' }
+  /pedidos/{id}:
+    get:
+      tags: [Pedidos]
+      summary: Consultar pedido por identificador
+      operationId: obterPedido
+      security: [{bearerAuth: []}]
+      parameters: [{ $ref: '#/components/parameters/PedidoId' }]
+      responses:
+        '200':
+          description: Pedido encontrado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Pedido' }
+        '401': { $ref: '#/components/responses/NaoAutenticado' }
+        '403': { $ref: '#/components/responses/SemPermissao' }
+        '404': { $ref: '#/components/responses/NaoEncontrado' }
+  /pedidos/{id}/status:
+    patch:
+      tags: [Pedidos]
+      summary: Atualizar situação operacional do pedido
+      description: Pagamento aprovado é requisito para mover pedido à preparação. Fluxo operacional EM_PREPARACAO → PRONTO → ENTREGUE.
+      operationId: atualizarStatusPedido
+      security: [{bearerAuth: []}]
+      x-required-roles: [COZINHA, GERENTE, ADMIN]
+      parameters: [{ $ref: '#/components/parameters/PedidoId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: {type: string, enum: [EM_PREPARACAO, PRONTO, ENTREGUE]}
+            example: {status: PRONTO}
+      responses:
+        '200':
+          description: Pedido atualizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Pedido' }
+        '401': { $ref: '#/components/responses/NaoAutenticado' }
+        '403': { $ref: '#/components/responses/SemPermissao' }
+        '404': { $ref: '#/components/responses/NaoEncontrado' }
+        '409': { $ref: '#/components/responses/Conflito' }
+        '422': { $ref: '#/components/responses/Validacao' }
+  /pedidos/{id}/cancelamento:
+    post:
+      tags: [Pedidos]
+      summary: Cancelar pedido dentro das regras de negócio
+      operationId: cancelarPedido
+      security: [{bearerAuth: []}]
+      x-required-roles: [CLIENTE, ATENDENTE, GERENTE, ADMIN]
+      parameters: [{ $ref: '#/components/parameters/PedidoId' }]
+      responses:
+        '200':
+          description: Pedido cancelado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Pedido' }
+        '401': { $ref: '#/components/responses/NaoAutenticado' }
+        '403': { $ref: '#/components/responses/SemPermissao' }
+        '404': { $ref: '#/components/responses/NaoEncontrado' }
+        '409': { $ref: '#/components/responses/Conflito' }
+  /pagamentos:
+    post:
+      tags: [Pagamentos]
+      summary: Executar pagamento simulado
+      description: A chave de idempotência evita duplicar a mesma tentativa de pagamento. A decisão do mock é controlada em ambiente de testes.
+      operationId: simularPagamento
+      security: [{bearerAuth: []}]
+      x-required-roles: [CLIENTE, ATENDENTE, ADMIN]
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Identificador único da tentativa, reutilizado nos reenvios da mesma operação.
+          schema: {type: string, minLength: 8, maxLength: 100}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PagamentoEntrada' }
+            example: {pedidoId: 8, resultadoSimulado: APROVADO}
+      responses:
+        '200':
+          description: Resultado do pagamento simulado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Pagamento' }
+              examples:
+                aprovado:
+                  value: {pagamentoId: 15, pedidoId: 8, valor: 45.90, status: APROVADO, transacaoMock: 'MOCK-00015'}
+                recusado:
+                  value: {pagamentoId: 16, pedidoId: 8, valor: 45.90, status: RECUSADO, transacaoMock: 'MOCK-00016'}
+        '401': { $ref: '#/components/responses/NaoAutenticado' }
+        '403': { $ref: '#/components/responses/SemPermissao' }
+        '404': { $ref: '#/components/responses/NaoEncontrado' }
+        '409': { $ref: '#/components/responses/Conflito' }
+        '422': { $ref: '#/components/responses/Validacao' }
+  /pagamentos/{id}:
+    get:
+      tags: [Pagamentos]
+      summary: Consultar pagamento simulado
+      operationId: obterPagamento
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: integer, minimum: 1}
+      responses:
+        '200':
+          description: Pagamento localizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Pagamento' }
+        '401': { $ref: '#/components/responses/NaoAutenticado' }
+        '403': { $ref: '#/components/responses/SemPermissao' }
+        '404': { $ref: '#/components/responses/NaoEncontrado' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    Page:
+      name: page
+      in: query
+      schema: {type: integer, minimum: 1, default: 1}
+    Limit:
+      name: limit
+      in: query
+      schema: {type: integer, minimum: 1, maximum: 100, default: 10}
+    PedidoId:
+      name: id
+      in: path
+      required: true
+      schema: {type: integer, minimum: 1}
+  responses:
+    NaoAutenticado:
+      description: Token ausente, inválido ou credenciais incorretas
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Erro' }
+          example: {error: NAO_AUTENTICADO, message: 'Autenticação necessária.', details: [], timestamp: '2026-10-10T12:00:00Z', path: '/pedidos'}
+    SemPermissao:
+      description: Perfil sem permissão para a operação
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Erro' }
+          example: {error: SEM_PERMISSAO, message: 'Usuário sem permissão.', details: [], timestamp: '2026-10-10T12:00:00Z', path: '/estoques/movimentacoes'}
+    NaoEncontrado:
+      description: Registro não encontrado
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Erro' }
+          example: {error: NAO_ENCONTRADO, message: 'Recurso não encontrado.', details: [], timestamp: '2026-10-10T12:00:00Z', path: '/pedidos/999'}
+    Conflito:
+      description: Conflito ou violação de regra de negócio
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Erro' }
+          example:
+            error: ESTOQUE_INSUFICIENTE
+            message: 'Não há quantidade suficiente para um ou mais itens.'
+            details: [{field: 'itens[0].quantidade', issue: 'Disponível: 1'}]
+            timestamp: '2026-10-10T12:00:00Z'
+            path: /pedidos
+    Validacao:
+      description: Informações ausentes ou inválidas
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Erro' }
+          example:
+            error: DADOS_INVALIDOS
+            message: 'Verifique os campos informados.'
+            details: [{field: canalPedido, issue: 'Campo obrigatório ou valor inválido'}]
+            timestamp: '2026-10-10T12:00:00Z'
+            path: /pedidos
+  schemas:
+    CadastroUsuario:
+      type: object
+      required: [nome, email, senha]
+      additionalProperties: false
+      properties:
+        nome: {type: string, minLength: 2, maxLength: 120}
+        email: {type: string, format: email}
+        senha: {type: string, format: password, minLength: 8, writeOnly: true}
+    Usuario:
+      type: object
+      required: [id, nome, email, perfil]
+      properties:
+        id: {type: integer}
+        nome: {type: string}
+        email: {type: string, format: email}
+        perfil: {type: string, enum: [CLIENTE, ATENDENTE, COZINHA, GERENTE, ADMIN]}
+    Login:
+      type: object
+      required: [email, senha]
+      properties:
+        email: {type: string, format: email}
+        senha: {type: string, format: password, writeOnly: true}
+    Token:
+      type: object
+      required: [accessToken, tokenType]
+      properties:
+        accessToken: {type: string}
+        tokenType: {type: string, enum: [bearer]}
+    UnidadeEntrada:
+      type: object
+      required: [nome, endereco]
+      properties:
+        nome: {type: string, minLength: 1}
+        endereco: {type: string, minLength: 1}
+        ativa: {type: boolean, default: true}
+    Unidade:
+      allOf:
+        - $ref: '#/components/schemas/UnidadeEntrada'
+        - type: object
+          required: [id]
+          properties:
+            id: {type: integer}
+    ProdutoEntrada:
+      type: object
+      required: [nome, preco]
+      properties:
+        nome: {type: string}
+        descricao: {type: string}
+        preco: {type: number, format: double, minimum: 0}
+        ativo: {type: boolean, default: true}
+    Produto:
+      allOf:
+        - $ref: '#/components/schemas/ProdutoEntrada'
+        - type: object
+          required: [id]
+          properties:
+            id: {type: integer}
+    Estoque:
+      type: object
+      required: [unidadeId, produtoId, quantidade]
+      properties:
+        unidadeId: {type: integer}
+        produtoId: {type: integer}
+        quantidade: {type: integer, minimum: 0}
+    MovimentacaoEntrada:
+      type: object
+      required: [unidadeId, produtoId, tipo, quantidade]
+      properties:
+        unidadeId: {type: integer, minimum: 1}
+        produtoId: {type: integer, minimum: 1}
+        tipo: {type: string, enum: [ENTRADA, SAIDA]}
+        quantidade: {type: integer, minimum: 1}
+    Movimentacao:
+      allOf:
+        - $ref: '#/components/schemas/MovimentacaoEntrada'
+        - type: object
+          required: [id, dataMovimentacao]
+          properties:
+            id: {type: integer}
+            dataMovimentacao: {type: string, format: date-time}
+    CanalPedido:
+      type: string
+      enum: [APP, TOTEM, BALCAO, PICKUP, WEB]
+    StatusPedido:
+      type: string
+      enum: [AGUARDANDO_PAGAMENTO, EM_PREPARACAO, PRONTO, ENTREGUE, CANCELADO]
+    ItemPedidoEntrada:
+      type: object
+      required: [produtoId, quantidade]
+      additionalProperties: false
+      properties:
+        produtoId: {type: integer, minimum: 1}
+        quantidade: {type: integer, minimum: 1}
+    ItemPedido:
+      allOf:
+        - $ref: '#/components/schemas/ItemPedidoEntrada'
+        - type: object
+          required: [precoUnitario]
+          properties:
+            precoUnitario: {type: number, minimum: 0, format: double}
+    PedidoEntrada:
+      type: object
+      required: [unidadeId, canalPedido, itens, formaPagamento]
+      additionalProperties: false
+      properties:
+        unidadeId: {type: integer, minimum: 1}
+        canalPedido: { $ref: '#/components/schemas/CanalPedido' }
+        itens:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/ItemPedidoEntrada' }
+        formaPagamento: {type: string, enum: [MOCK]}
+    Pedido:
+      type: object
+      required: [id, usuarioId, unidadeId, canalPedido, valorTotal, status, itens]
+      properties:
+        id: {type: integer}
+        usuarioId: {type: integer}
+        unidadeId: {type: integer}
+        canalPedido: { $ref: '#/components/schemas/CanalPedido' }
+        valorTotal: {type: number, format: double, minimum: 0}
+        status: { $ref: '#/components/schemas/StatusPedido' }
+        itens: {type: array, items: {$ref: '#/components/schemas/ItemPedido'}}
+    PagamentoEntrada:
+      type: object
+      required: [pedidoId, resultadoSimulado]
+      additionalProperties: false
+      properties:
+        pedidoId: {type: integer, minimum: 1}
+        resultadoSimulado:
+          type: string
+          enum: [APROVADO, RECUSADO]
+          description: 'Controle apenas para ambiente de teste; em produção um cliente não definiria a aprovação.'
+    Pagamento:
+      type: object
+      required: [pagamentoId, pedidoId, valor, status, transacaoMock]
+      properties:
+        pagamentoId: {type: integer}
+        pedidoId: {type: integer}
+        valor: {type: number, format: double, minimum: 0}
+        status: {type: string, enum: [APROVADO, RECUSADO]}
+        transacaoMock: {type: string}
+    Erro:
+      type: object
+      required: [error, message, details, timestamp, path]
+      properties:
+        error: {type: string}
+        message: {type: string}
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field: {type: string}
+              issue: {type: string}
+        timestamp: {type: string, format: date-time}
+        path: {type: string}
+        requestId: {type: string, format: uuid}
